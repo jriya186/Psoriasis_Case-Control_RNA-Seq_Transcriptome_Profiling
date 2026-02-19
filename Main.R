@@ -1,3 +1,5 @@
+source("/Users/jriya/Desktop/RNA-seq_psoriasis/functions.R")
+
 library(tidyverse)
 
 # Loading counts data
@@ -114,19 +116,11 @@ Volcano_plot
 library(pheatmap)
 # top 50 significant genes 
 top50sig <- head(res_df[!is.na(res_df$padj) & res_df$padj <0.05 & abs(res_df$log2FoldChange) > 1, ], 50)
-# normalized top 50 counts
-top50_counts <- assay(vsd)[rownames(top50sig), ]
-rownames(top50_counts) <- top50sig$symbol
-annotation_col <- data.frame(Condition = metadata$tissue_type)
-rownames(annotation_col) <- colnames(top50_counts)
-
-# plotting heatmap
-heatmap_plot <- pheatmap(top50_counts,
-                         annotation_col = annotation_col,
-                         show_colnames = FALSE,
-                         scale = "row",
-                         main = "Top 50 DEGs",
-                         fontsize_row = 7)
+plot_gene_heatmap(vsd, res_df, 
+                  gene_ids = rownames(top50sig),
+                  title = "Top 50 DEGs",
+                  metadata = metadata,
+                  cluster_rows = TRUE)
 
 # dispersion plot .. model QC
 dispersion_plot <- plotDispEsts(dds)
@@ -139,8 +133,92 @@ pheatmap(as.matrix(sampleDistance_heatmap),
          show_colnames = FALSE,
          main = "Sample Distances")
 
+# Oxidative stress analysis
+oxidative_stress_genes <- c("SOD1","SOD2","SOD3","CAT","GPX1","GPX2","GPX4",
+                            "TXN", "TXNRD1", "TXNRD2", "HMOX1", "HMOX2",
+                            "NOX1", "NOX4", "CYBB","NFE2L2", "KEAP1",
+                            "PRDX1", "PRDX2", "PRDX3", "NOS1", "NOS2", "NOS3",
+                            "MPO", "CYBA", "NCF1", "NCF2", "NCF4",
+                            "SIRT1", "SESN1", "SESN2", "MTOR", "CYCS", "PON1")
 
+ox_table <- get_oxidative_stress_results(res_df, oxidative_stress_genes)
+ox_table
 
+write.csv(ox_table, "/Users/jriya/Desktop/RNA-seq_psoriasis/oxidative_stress_results.csv", 
+          row.names=FALSE)
+
+# gene-specfic heatmap of significant oxidative stress related genes found
+
+sig_ox_genes <- rownames(res_df[res_df$symbol %in% ox_table$Gene, ])
+# Oxidative stress heatmap
+plot_gene_heatmap(vsd, res_df,
+                  gene_ids = sig_ox_genes,
+                  title = "Oxidative Stress Genes",
+                  metadata = metadata,
+                  cluster_rows = FALSE)
+
+dot_plot <- plot_oxidative_dotplot(ox_table, title = "Oxidative Stress Genes")
+dot_plot
+
+intersect(ox_table$Gene, top50sig$symbol)
+# none in the top50
+
+library(clusterProfiler)
+
+# significant DE genes
+sig_genes <- rownames(res_df[!is.na(res_df$padj) &
+                               res_df$padj < 0.05 &
+                               abs(res_df$log2FoldChange) > 1, ])
+# GO enrichment with ORA (pathway analysis for significant genes)
+# Biological Processes
+ora_BP <- enrichGO(gene=sig_genes,
+                   OrgDb=org.Hs.eg.db,
+                   keyType="ENTREZID",
+                   ont="BP",
+                   pAdjustMethod="BH",
+                   pvalueCutoff=0.05,
+                   qvalueCutoff = 0.05)
+summary(ora_BP)
+
+# visualizing ora_BP
+barplot(ora_BP,
+        showCategory = 20,
+        title = "Top 20 Enriched GO Biological Processes",
+        x = "GeneRatio") +
+  theme(axis.text.y = element_text(size = 8),
+        plot.title = element_text(hjust = 0.5))
+
+# molecular functions
+ora_MF <- enrichGO(gene = sig_genes,
+                   OrgDb = org.Hs.eg.db,
+                   keyType = "ENTREZID",
+                   ont = "MF",
+                   pAdjustMethod = "BH",
+                   pvalueCutoff = 0.05,
+                   qvalueCutoff = 0.05)
+
+# cellular component
+ora_CC <- enrichGO(gene = sig_genes,
+                   OrgDb = org.Hs.eg.db,
+                   keyType = "ENTREZID",
+                   ont = "CC",
+                   pAdjustMethod = "BH",
+                   pvalueCutoff = 0.05,
+                   qvalueCutoff = 0.05)
+
+barplot(ora_MF,
+        showCategory = 20,
+        title = "Top 20 Enriched GO Molecular Functions",
+        x = "GeneRatio") +
+  theme(axis.text.y = element_text(size = 8),
+        plot.title = element_text(hjust = 0.5))
+
+barplot(ora_CC,
+        showCategory = 20,
+        title = "Top 20 Enriched GO Cellular Components",
+        x = "GeneRatio") +
+  theme(axis.text.y = element_text(size = 8),
+        plot.title = element_text(hjust = 0.5))
 
 
 
