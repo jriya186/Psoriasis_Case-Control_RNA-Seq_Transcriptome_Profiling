@@ -220,6 +220,63 @@ barplot(ora_CC,
   theme(axis.text.y = element_text(size = 8),
         plot.title = element_text(hjust = 0.5))
 
+library(fgsea)
+library(msigdbr)
+
+# creating a ranked gene list using Wald Statistic from DESeq2 results
+
+ranked_genes <- res_df$stat
+names(ranked_genes) <- rownames(res_df)
+ranked_genes <- ranked_genes[!is.na(ranked_genes)]
+ranked_genes <- sort(ranked_genes, decreasing = TRUE)
+head(ranked_genes)
+tail(ranked_genes)
+
+# loading hallmarks from MsigDB
+hallmarks <- msigdbr(species = "Homo sapiens", category = "H")
+head(hallmarks[, c("gs_name","entrez_gene")])
+
+# converting to match gsea format
+hallmark_list <- split(hallmarks$entrez_gene, hallmarks$gs_name)
+names(ranked_genes) <- as.character(names(ranked_genes))
+
+# Running fgsea
+set.seed(42)
+fgsea_results <- fgsea(pathways = hallmark_list,
+                       stats = ranked_genes,
+                       minSize = 15,
+                       maxSize = 500)
+head(fgsea_results[order(fgsea_results$padj), c("pathway","NES", "padj")])
+
+#significant fgsea pathways
+sum(fgsea_results$padj < 0.05) #30
+
+# Upregulated in psoriasis i.e. positive NES
+sig_up <- fgsea_results[fgsea_results$padj <0.05 & fgsea_results$NES > 0, ]
+sig_up <- sig_up[order(sig_up$NES, decreasing = TRUE), ]
+nrow(sig_up) #26
+
+sig_down <- fgsea_results[fgsea_results$padj < 0.05 & fgsea_results$NES < 0, ]
+sig_down <- sig_down[order(sig_down$NES), ]
+nrow(sig_down) #4
+
+print(sig_down[, c("pathway", "NES","padj")])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
