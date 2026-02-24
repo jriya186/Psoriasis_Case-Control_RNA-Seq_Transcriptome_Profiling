@@ -1,3 +1,6 @@
+### Full Analysis Report with Results:
+https://rpubs.com/jriya186/1401858
+
 # Psoriasis RNA-seq Analysis: Oxidative Stress Transcriptional Signature
 
 A bulk RNA-seq analysis pipeline examining differential gene expression between lesional psoriatic and normal skin, with a focused investigation into the oxidative stress transcriptional landscape in psoriasis.
