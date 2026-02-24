@@ -1,6 +1,7 @@
 source("/Users/jriya/Desktop/RNA-seq_psoriasis/functions.R")
 
 library(tidyverse)
+library(ggplot2)
 
 # Loading counts data
 counts <- read.delim("data/GSE54456_raw_counts_GRCh38.p13_NCBI.tsv", row.names = 1)
@@ -114,6 +115,9 @@ Volcano_plot
 
 # Heatmap
 library(pheatmap)
+
+annotation_col <- data.frame(Condition = metadata$tissue_type)
+rownames(annotation_col) <- colnames(assay(vsd))
 # top 50 significant genes 
 top50sig <- head(res_df[!is.na(res_df$padj) & res_df$padj <0.05 & abs(res_df$log2FoldChange) > 1, ], 50)
 plot_gene_heatmap(vsd, res_df, 
@@ -262,15 +266,74 @@ nrow(sig_down) #4
 
 print(sig_down[, c("pathway", "NES","padj")])
 
+# fgsea visualization
+sig_up$pathway <- gsub("HALLMARK_", "", sig_up$pathway)
+sig_down$pathway <- gsub("HALLMARK_", "", sig_down$pathway)
+sig_pathways_split <- rbind(sig_up,sig_down)
+sig_pathways_split$direction <- ifelse(sig_pathways_split$NES > 0, "Upregulated","Downregulated")
+
+ggplot(sig_pathways_split, aes(x = NES, y = reorder(pathway, NES), fill = direction)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("Upregulated" = "firebrick", "Downregulated" = "steelblue")) +
+  labs(title = "Significant Hallmark Pathways in Psoriatic Skin",
+       x = "Normalized Enrichment Score",
+       y = "",
+       fill = "Direction") +
+  theme_bw() +
+  theme(axis.text.y = element_text(size = 7),
+        plot.title = element_text(hjust = 0.5))
 
 
+# checking fgsea for ROS pathway
+
+fgsea_results[grep("REACTIVE_OXYGEN", fgsea_results$pathway),
+              c("pathway","NES","padj")]
+plotEnrichment(hallmark_list[["HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY"]],
+               ranked_genes) +
+  labs(title = "GSEA: Hallmark Reactive Oxygen Species Pathway",
+       x= "Rank",
+       y= "Enrichment Score") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust=0.05))
 
 
+# extracting leading genes in ROS pathway
+ros_results <- fgsea_results[fgsea_results$pathway == "HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY", ]
 
+leading_edge <- ros_results$leadingEdge[[1]]
+# converting to gene symbols
+leading_edge_symbols <- mapIds(org.Hs.eg.db,
+                               keys = leading_edge,
+                               column = "SYMBOL",
+                               keytype = "ENTREZID",
+                               multiVals = "first")
+print(leading_edge_symbols)
 
+# making a table of these genes and plotting a heatmap
+leading_edge_df <- res_df[res_df$symbol %in% leading_edge_symbols, 
+                          c("symbol", "baseMean", "log2FoldChange", "lfcSE", "padj")]
+leading_edge_df <- leading_edge_df[order(leading_edge_df$log2FoldChange, decreasing = TRUE), ]
 
+leading_edge_df$baseMean <- round(leading_edge_df$baseMean, 2) #rounding 
+leading_edge_df$log2FoldChange <- round(leading_edge_df$log2FoldChange, 3)
+leading_edge_df$lfcSE <- round(leading_edge_df$lfcSE, 3)
+leading_edge_df$padj <- formatC(leading_edge_df$padj, format = "e", digits = 3)
 
+colnames(leading_edge_df) <- c("Gene", "Base Mean", "Log2FC", "SE", "Adjusted P-value")
 
+write.csv(leading_edge_df,
+          "/Users/jriya/Desktop/RNA-seq_psoriasis/leading_edge_ROS_genes.csv",
+          row.names = FALSE)
+
+# plotting heatmap
+leading_edge_ids <- rownames(res_df[res_df$symbol %in% leading_edge_symbols, ])
+
+plot_gene_heatmap(vsd, res_df,
+                  gene_ids = leading_edge_ids,
+                  title = "ROS Pathway Leading Edge Genes",
+                  metadata = metadata,
+                  cluster_rows = TRUE,
+                  fontsize = 8)
 
 
 

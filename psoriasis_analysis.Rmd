@@ -1,0 +1,318 @@
+---
+title: "Psoriasis RNA-seq Analysis: Oxidative Stress Transcriptional Signature"
+author: ""
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    theme: flatly
+    highlight: tango
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+
+# Source functions and run full analysis
+source("/Users/jriya/Desktop/RNA-seq_psoriasis/functions.R")
+source("/Users/jriya/Desktop/RNA-seq_psoriasis/main.R")
+```
+
+---
+
+# Overview
+
+Psoriasis is a chronic inflammatory skin disease affecting approximately 2-3% of the world's population. Its pathogenesis involves complex immune dysregulation, keratinocyte hyperproliferation, and chronic inflammation. While the inflammatory transcriptional signature of psoriasis is well established in the literature, the role of oxidative stress — defined as an imbalance between reactive oxygen species (ROS) production and antioxidant defense capacity — remains an important and often overlooked contributor to disease pathogenesis (Pleńkowska et al., 2020).
+
+This analysis uses a large publicly available bulk RNA-seq dataset (GSE54456; Li et al., 2014) to perform differential expression analysis between lesional psoriatic and normal healthy skin. Beyond characterizing the global transcriptional landscape, this project specifically investigates the oxidative stress gene expression signature in psoriatic lesions — asking whether antioxidant and ROS-related genes show coordinated dysregulation that is distinct from the dominant inflammatory signal.
+
+**Dataset:** GSE54456 — 90 lesional psoriatic skin biopsies vs 81 normal skin biopsies (171 samples total after QC filtering)
+
+---
+
+# Data Loading and Preprocessing
+
+Raw integer counts were obtained from NCBI's standardized recount pipeline applied to the SRA data deposited alongside GSE54456. Sample metadata was downloaded from the SRA Run Selector.
+
+```{r data_summary}
+dim(counts)
+table(metadata$tissue_type)
+```
+
+The count matrix contains **`r nrow(counts)` genes** across **`r ncol(counts)` samples**. Five samples had multiple SRR runs mapped to the same GSM ID and were deduplicated. Three additional samples present in the metadata were absent from the raw count matrix, likely excluded during NCBI's QC pipeline. The final dataset consists of **90 lesional psoriatic** and **81 normal skin** samples — a well-balanced case-control design.
+
+---
+
+# Differential Expression Analysis
+
+Differential expression was performed using DESeq2, which models count data with a negative binomial distribution and applies empirical Bayes shrinkage to stabilize dispersion estimates across genes. Normal skin was set as the reference level so that positive log2 fold changes represent upregulation in psoriatic lesions.
+
+```{r de_summary}
+summary(res_sig)
+```
+
+```{r top_genes}
+head(res_df[, c("symbol", "log2FoldChange", "padj")])
+```
+
+Applying thresholds of padj < 0.05 and |log2FC| > 1 yields **1,290 upregulated** and **1,419 downregulated** genes in psoriatic skin. The top differentially expressed genes include well-established psoriasis markers — SPRR family proteins involved in skin barrier remodeling, S100A12 as a damage-associated inflammatory signal, and IL36G as a key driver of psoriatic inflammation — validating the analysis.
+
+To further characterize the transcriptional landscape and assess data quality, a series of exploratory visualizations were performed.
+
+---
+
+# Exploratory Data Analysis
+
+## PCA
+
+```{r pca, fig.width=7, fig.height=5}
+PCA_plot
+```
+
+PC1 explains **55% of total variance** and cleanly separates psoriatic from normal samples, confirming that disease status is the dominant source of transcriptional variation in this dataset. PC2 captures 9% of variance and likely reflects residual donor-to-donor variability, which is expected in a human cohort study. The clean separation on PC1 gives strong confidence that the differential expression results reflect true biological signal rather than technical noise.
+
+## Dispersion Plot
+
+```{r dispersion, fig.width=7, fig.height=5}
+plotDispEsts(dds)
+```
+
+The dispersion plot shows the expected pattern for a well-modeled RNA-seq dataset — dispersion is highest for lowly expressed genes and decreases as mean expression increases. The fitted trend line runs smoothly through the cloud of per-gene estimates and the final shrunken estimates cluster tightly around it, indicating DESeq2's empirical Bayes shrinkage is working correctly. Zero outlier samples were detected, confirming data quality.
+
+## Sample Distance Heatmap
+
+```{r sample_distance, fig.width=9, fig.height=7}
+annotation_col <- data.frame(Condition = metadata$tissue_type)
+rownames(annotation_col) <- colnames(assay(vsd))
+
+pheatmap(as.matrix(dist(t(assay(vsd)))),
+         annotation_col = annotation_col,
+         show_rownames = FALSE,
+         show_colnames = FALSE,
+         main = "Sample Distances")
+```
+
+The sample distance heatmap confirms the PCA result — two distinct blocks are visible corresponding to psoriatic and normal samples, with low within-group distances and high between-group distances. A small number of psoriatic samples show slightly higher distances from the main psoriatic cluster, reflecting mild inter-patient variability in disease severity. No samples were identified as outliers requiring exclusion.
+
+## Volcano Plot
+
+```{r volcano, fig.width=9, fig.height=7}
+Volcano_plot
+```
+
+The volcano plot reveals an asymmetric distribution of differentially expressed genes. Upregulated genes in psoriatic skin show both greater fold change magnitudes and higher statistical significance compared to downregulated genes, suggesting a more pronounced transcriptional activation response. This pattern is consistent with the active inflammatory, proliferative, and stress response programs known to be induced in psoriatic lesions.
+
+## Top 50 DEGs Heatmap
+
+```{r top50_heatmap, fig.width=10, fig.height=10}
+plot_gene_heatmap(vsd, res_df,
+                  gene_ids = rownames(top50sig),
+                  title = "Top 50 DEGs",
+                  metadata = metadata,
+                  cluster_rows = TRUE,
+                  fontsize = 7)
+```
+
+The top 50 DEGs heatmap shows near-perfect separation of psoriatic and normal samples by hierarchical clustering. The gene clustering reveals biologically coherent modules — SPRR family proteins reflect skin barrier disruption, S100 and interleukin genes represent the inflammatory signature, and DEFB antimicrobial peptides form a distinct group. The dominant pattern is upregulation in psoriatic skin, consistent with the volcano plot.
+
+Having established confidence in data quality and the overall DE landscape, the analysis now turns to the specific biological question of interest: the oxidative stress transcriptional signature in psoriatic skin.
+
+---
+
+# Oxidative Stress Analysis
+
+## Rationale and Gene Panel
+
+Oxidative stress — driven by excess reactive oxygen species (ROS) and insufficient antioxidant capacity — has been increasingly recognized as an important contributor to psoriasis pathogenesis (Pleńkowska et al., 2020). ROS overproduction in psoriatic skin activates NF-κB and MAPK signaling pathways, stimulates Th1 and Th17 immune responses, and drives keratinocyte hyperproliferation. Markers of oxidative stress including malondialdehyde (MDA) and nitric oxide (NO) correlate with disease severity (Gabr & Al-Ghadir, 2012), suggesting the oxidative stress burden is functionally relevant rather than merely coincidental.
+
+A curated panel of 34 genes was assembled covering the major arms of oxidative stress biology: ROS-generating enzymes (NADPH oxidases, NOS isoforms, MPO), antioxidant defense (SOD family, CAT, GPX family, thioredoxins, peroxiredoxins), the master Nrf2/KEAP1 stress response pathway, mitochondrial stress sensors (CYCS, SESN family), and SIRT1 which has been specifically reported as downregulated in psoriatic fibroblasts.
+
+## Significant Oxidative Stress DEGs
+
+```{r ox_results}
+ox_table
+```
+
+From the 34-gene panel, **5 genes** reached statistical significance (padj < 0.05, |log2FC| > 1):
+
+- **NOS2** (log2FC ~5.6) — inducible nitric oxide synthase, the primary driver of NO and ROS production in immune-activated cells. Its dramatic upregulation is consistent with reports of elevated NO in psoriatic lesions correlating with disease severity
+- **SOD2** (log2FC ~1.5) — the mitochondrial isoform of superoxide dismutase, upregulated as a compensatory response to increased mitochondrial ROS production
+- **GPX2** (log2FC ~1.5) — a glutathione peroxidase that detoxifies hydrogen peroxide, representing active antioxidant defense
+- **HMOX1** (log2FC ~1.4) — heme oxygenase-1, a classic and sensitive marker of cellular oxidative stress and a cytoprotective response gene
+- **CYCS** (log2FC ~1.3) — cytochrome c, consistent with mitochondrial membrane disruption and induction of apoptosis via oxidative stress, as reported by Gabr & Al-Ghadir (2012)
+
+Critically, none of these 5 genes appeared among the top 50 most significantly differentially expressed genes overall — underscoring the importance of targeted gene panel approaches. The oxidative stress signature represents a distinct and subtle transcriptional layer beneath the dominant inflammatory response.
+
+## Oxidative Stress Heatmap
+
+```{r ox_heatmap, fig.width=10, fig.height=5}
+plot_gene_heatmap(vsd, res_df,
+                  gene_ids = sig_ox_genes,
+                  title = "Oxidative Stress Genes",
+                  metadata = metadata,
+                  cluster_rows = FALSE,
+                  fontsize = 10)
+```
+
+All 5 significant oxidative stress genes are consistently upregulated across psoriatic samples. NOS2 shows the strongest and most uniform upregulation. SOD2 and CYCS show more variability within the psoriatic group, suggesting heterogeneity in mitochondrial stress response that may relate to differences in disease severity across patients.
+
+## Oxidative Stress Dot Plot
+
+```{r ox_dotplot, fig.width=7, fig.height=5}
+dot_plot
+```
+
+The dot plot summarizes both the magnitude and statistical significance of the 5 significant oxidative stress genes simultaneously. NOS2 stands out as the most significantly and strongly upregulated gene. The pattern is consistent with simultaneous ROS overproduction (NOS2) and compensatory antioxidant upregulation (SOD2, GPX2, HMOX1), with CYCS indicating downstream mitochondrial consequences.
+
+To contextualize these individual gene findings within broader biological pathways, pathway enrichment analyses were performed.
+
+---
+
+# Pathway Enrichment Analysis
+
+## Over-Representation Analysis (ORA)
+
+ORA tests whether genes from a predefined biological pathway are overrepresented in the significant DE gene list beyond what would be expected by chance. Analysis was performed against Gene Ontology (GO) terms across all three ontologies using clusterProfiler with Benjamini-Hochberg multiple testing correction.
+
+### Biological Processes
+
+```{r ora_bp, fig.width=9, fig.height=7}
+barplot(ora_BP, showCategory = 20,
+        title = "Top 20 Enriched GO Biological Processes") +
+  theme(axis.text.y = element_text(size = 8),
+        plot.title = element_text(hjust = 0.5))
+```
+
+The BP enrichment results reflect the well-established biology of psoriasis. The top enriched processes include cell killing, humoral immune response, antimicrobial peptide response, and defense response to bacteria — representing active innate and adaptive immune activation. Keratinocyte differentiation, keratinization, and epidermis development terms reflect aberrant skin barrier biology. Chemokine-mediated signaling and leukocyte chemotaxis are consistent with immune cell recruitment into psoriatic lesions. Retinoid and terpenoid metabolic processes likely reflect altered lipid metabolism linked to oxidative stress through lipid peroxidation.
+
+### Molecular Functions
+
+```{r ora_mf, fig.width=9, fig.height=7}
+barplot(ora_MF, showCategory = 20,
+        title = "Top 20 Enriched GO Molecular Functions") +
+  theme(axis.text.y = element_text(size = 8),
+        plot.title = element_text(hjust = 0.5))
+```
+
+The MF results are dominated by cytokine activity, cytokine receptor binding, chemokine activity, and immune receptor activity — consistent with the cytokine-driven inflammation in psoriasis. Peptidase inhibitor and endopeptidase regulator activity terms suggest alterations in protease regulation relevant to skin barrier dysfunction and inflammatory mediator processing.
+
+### Cellular Components
+
+```{r ora_cc, fig.width=9, fig.height=7}
+barplot(ora_CC, showCategory = 20,
+        title = "Top 20 Enriched GO Cellular Components") +
+  theme(axis.text.y = element_text(size = 8),
+        plot.title = element_text(hjust = 0.5))
+```
+
+The CC results show enrichment of the cornified envelope consistent with aberrant keratinocyte differentiation. Synaptic membrane and ion channel complex terms likely reflect neuroimmune mediators and ion channels involved in itch signaling and keratinocyte calcium homeostasis, both disrupted in psoriasis. The collagen-containing extracellular matrix term reflects dermal remodeling.
+
+While ORA provides a clear picture of pathway enrichment among the most significantly changed genes, it is limited by its reliance on a significance cutoff. GSEA was therefore performed to capture coordinated pathway-level signals across the entire transcriptome.
+
+---
+
+## Gene Set Enrichment Analysis (GSEA)
+
+GSEA was performed using the fgsea package against the MSigDB Hallmark gene set collection — 50 well-curated biological signatures. Genes were ranked by the DESeq2 Wald statistic, which incorporates both fold change magnitude and its standard error, making it more robust than ranking by fold change alone.
+
+```{r gsea_summary}
+cat("Total significant pathways:", sum(fgsea_results$padj < 0.05), "\n")
+cat("Upregulated:", nrow(sig_up), "\n")
+cat("Downregulated:", nrow(sig_down), "\n")
+```
+
+**30 out of 50** Hallmark pathways were significantly enriched (padj < 0.05), with **26 upregulated** and only **4 downregulated** in psoriatic skin — consistent with the predominantly activating transcriptional response observed throughout the analysis.
+
+### Significant Hallmark Pathways
+
+```{r gsea_plot, fig.width=10, fig.height=9}
+sig_pathways_split <- rbind(sig_up, sig_down)
+sig_pathways_split$direction <- ifelse(sig_pathways_split$NES > 0, "Upregulated", "Downregulated")
+
+ggplot(sig_pathways_split, aes(x = NES, y = reorder(pathway, NES), fill = direction)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("Upregulated" = "firebrick", "Downregulated" = "steelblue")) +
+  labs(title = "Significant Hallmark Pathways in Psoriatic Skin",
+       x = "Normalized Enrichment Score",
+       y = "",
+       fill = "Direction") +
+  theme_bw() +
+  theme(axis.text.y = element_text(size = 7),
+        plot.title = element_text(hjust = 0.5))
+```
+
+The top upregulated pathways — E2F targets, MYC targets, and G2M checkpoint — reflect keratinocyte hyperproliferation. Interferon gamma and alpha response pathways confirm the well-established role of interferons in psoriasis autoimmunity. IL6/JAK/STAT3 and TNFα/NF-κB signaling confirm the cytokine-driven inflammatory environment. mTORC1 signaling enrichment is particularly noteworthy given its reported hyperactivation in psoriatic skin and its mechanistic link to oxidative stress through sestrin regulation (Pleńkowska et al., 2020). The REACTIVE_OXYGEN_SPECIES_PATHWAY among significant upregulated pathways (NES = 1.54, padj = 0.025) provides direct pathway-level support for the oxidative stress hypothesis of this project.
+
+The 4 downregulated pathways tell an equally meaningful story: MYOGENESIS downregulation reflects loss of normal differentiation programs; UV_RESPONSE_DN suggests overlap between UV stress and psoriatic gene programs; BILE_ACID_METABOLISM reflects broader metabolic dysregulation consistent with lipid peroxidation in psoriasis; and EPITHELIAL_MESENCHYMAL_TRANSITION downregulation may indicate psoriatic keratinocytes are locked in a hyperproliferative rather than differentiating state.
+
+---
+
+## ROS Pathway Deep Dive
+
+The HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY was the most directly relevant GSEA result to the central question of this project. To characterize which specific genes are driving this enrichment, the GSEA leading edge was examined.
+
+### GSEA Enrichment Plot
+
+```{r ros_enrichment, fig.width=8, fig.height=5}
+plotEnrichment(hallmark_list[["HALLMARK_REACTIVE_OXYGEN_SPECIES_PATHWAY"]],
+               ranked_genes) +
+  labs(title = "GSEA: Hallmark Reactive Oxygen Species Pathway",
+       x = "Rank",
+       y = "Enrichment Score") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+The enrichment plot shows a steep early climb in the enrichment score, indicating that ROS pathway genes are concentrated toward the top of the ranked gene list and are systematically upregulated in psoriatic skin. The curve peaks around rank 8,000-9,000 before gradually declining, producing a positive NES of 1.54. The dense clustering of tick marks on the left side confirms the non-random upregulated distribution of ROS pathway genes. The leading edge — genes to the left of the peak — represents those most responsible for driving the enrichment signal.
+
+### Leading Edge Genes
+
+```{r leading_edge}
+leading_edge_df
+```
+
+24 leading edge genes were identified. These fall into functionally coherent groups:
+
+**ROS-generating machinery:** MPO reflects neutrophil-derived ROS production consistent with immune infiltration in psoriatic lesions. Mitochondrial complex I subunits NDUFB4, NDUFA6, and NDUFS2 represent upregulation of oxidative phosphorylation components — a primary intracellular source of superoxide.
+
+**Antioxidant defense:** SOD2, TXNRD1, TXN, PRDX1, PRDX6, GLRX2, and SRXN1 collectively represent coordinated upregulation of the thioredoxin and peroxiredoxin antioxidant systems. G6PD upregulation ensures NADPH supply for antioxidant enzyme recycling. ATOX1 provides copper chaperone protection against metal-induced oxidative damage.
+
+**Stress response signaling:** JUNB is a stress-responsive AP-1 transcription factor. OXSR1 is a kinase activated directly by oxidative stress. SBNO2 and LAMTOR5 represent broader stress and metabolic signaling responses.
+
+The simultaneous upregulation of both ROS-generating (MPO, mitochondrial complex I) and antioxidant defense genes (thioredoxins, peroxiredoxins, SOD2) indicates active oxidative imbalance in psoriatic skin — the antioxidant system is being induced as a compensatory response but is operating against a sustained and elevated ROS burden.
+
+### Leading Edge Heatmap
+
+```{r leading_edge_heatmap, fig.width=10, fig.height=8}
+plot_gene_heatmap(vsd, res_df,
+                  gene_ids = leading_edge_ids,
+                  title = "ROS Pathway Leading Edge Genes",
+                  metadata = metadata,
+                  cluster_rows = TRUE,
+                  fontsize = 8)
+```
+
+The leading edge heatmap confirms consistent upregulation of ROS pathway genes across psoriatic samples. Hierarchical clustering reveals two broad expression modules — a top cluster dominated by MPO, stress response genes, and metabolic regulators with stronger and more uniform upregulation, and a bottom cluster enriched for mitochondrial and thioredoxin system genes showing more modest but consistent upregulation.
+
+---
+
+# Session Info
+
+```{r session_info}
+sessionInfo()
+```
+
+---
+
+# References
+
+- Li B, Tsoi LC, Swindell WR, et al. Transcriptome analysis of psoriasis in a large case-control sample: RNA-seq provides insights into disease mechanisms. *J Invest Dermatol.* 2014;134(7):1828-1838. doi:10.1038/jid.2014.28
+- Pleńkowska J, Gabig-Cimińska M, Mozolewski P. Oxidative stress as an important contributor to the pathogenesis of psoriasis. *Int J Mol Sci.* 2020;21(17):6206. doi:10.3390/ijms21176206
+- Gabr SA, Al-Ghadir AH. Role of cellular oxidative stress and cytochrome c in the pathogenesis of psoriasis. *Arch Dermatol Res.* 2012;304(6):451-457. doi:10.1007/s00403-012-1230-8
