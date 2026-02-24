@@ -48,11 +48,9 @@ This project uses a large publicly available RNA-seq dataset to perform differen
   - **GPX2** — upregulated, glutathione peroxidase stress response
   - **HMOX1** — upregulated, classic oxidative stress response gene
   - **CYCS** — upregulated, consistent with mitochondrial apoptotic signaling
-- GO enrichment confirms dominant inflammatory, skin barrier, and cell cycle signatures
-
-### In Progress
-- GSEA on full ranked gene list
-- GSEA focused on oxidative stress pathways
+- GO enrichment confirms dominant inflammatory, skin barrier, and cell cycle signatures across Biological Process, Molecular Function, and Cellular Component ontologies
+- GSEA identified 30 significant Hallmark pathways (26 upregulated, 4 downregulated), including interferon response, mTORC1 signaling, and the Reactive Oxygen Species pathway — directly supporting the oxidative stress hypothesis
+- ROS pathway leading edge analysis identified 24 genes driving the enrichment, revealing simultaneous upregulation of ROS-generating machinery (MPO, mitochondrial complex I subunits) and antioxidant defense genes (SOD2, thioredoxins, peroxiredoxins), consistent with active oxidative imbalance in psoriatic skin
 
 ## Repository Structure
 
@@ -71,7 +69,9 @@ This project uses a large publicly available RNA-seq dataset to perform differen
 │   ├── oxidative_stress_heatmap.png
 │   └── ora_barplots/
 └── results/
-    └── oxidative_stress_results.csv
+    ├── oxidative_stress_results.csv
+    └── leading_edge_ROS_genes.csv
+    
 ```
 
 ---
