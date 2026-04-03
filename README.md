@@ -55,6 +55,9 @@ This project uses a large publicly available RNA-seq dataset to perform differen
 - GSEA identified 30 significant Hallmark pathways (26 upregulated, 4 downregulated), including interferon response, mTORC1 signaling, and the Reactive Oxygen Species pathway — directly supporting the oxidative stress hypothesis
 - ROS pathway leading edge analysis identified 24 genes driving the enrichment, revealing simultaneous upregulation of ROS-generating machinery (MPO, mitochondrial complex I subunits) and antioxidant defense genes (SOD2, thioredoxins, peroxiredoxins), consistent with active oxidative imbalance in psoriatic skin
 
+### Note: Potential Limitation and Future Direction
+- This analysis performs a straightforward bulk RNA-seq differential expression comparison between lesional psoriatic and normal skin samples and does not account for the epidermal expansion characteristic of psoriasis. Since punch biopsies capture mixed cell populations, some differentially expressed genes may reflect shifts in cell type composition rather than transcriptional changes within the same cell types. Future work could incorporate cell type deconvolution approaches such as CIBERSORT to disentangle compositional effects from true differential expression.
+
 ## Repository Structure
 
 ```
